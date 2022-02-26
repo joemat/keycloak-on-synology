@@ -1,0 +1,56 @@
+version: "3"
+services:
+  db:
+    image: postgres:latest
+    restart: always
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata      
+    env_file:
+      - secrets.env # should contain POSTGRES_PASSWORD and POSTGRES_USER
+    volumes:
+      - dbvol:/var/lib/postgresql/data/pgdata
+
+  keycloak:
+    build: ./keycloak
+    restart: always
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KC_DB_URL: jdbc:postgresql://db/${POSTGRES_USER}
+      KC_HOSTNAME: ${MY_KC_SERVER}
+      KC_HTTPS_CERTIFICATE_FILE: /certs/${MY_KC_SERVER}.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /certs/${MY_KC_SERVER}.key
+      # KC_PROXY_MODE: reencrypt
+    ports:
+      - 127.0.0.1:9443:8443
+    env_file:
+      - secrets.env
+    volumes:
+      - certs:/certs
+    links:
+      - db      
+      
+  omgwtfssl:
+    image: paulczar/omgwtfssl
+    restart: "no"
+    volumes:
+      - certs:/certs
+    # make files readable for keycloak
+    command: bash -c "/usr/local/bin/generate-certs && chmod g+r /certs/*"
+    environment:
+      SSL_SUBJECT: "${MY_KC_SERVER}"
+      CA_SUBJECT: "${MY_EMAIL}"
+      SSL_KEY: /certs/${MY_KC_SERVER}.key
+      SSL_CSR: /certs/${MY_KC_SERVER}.csr
+      SSL_CERT: /certs/${MY_KC_SERVER}.crt
+
+volumes:
+  dbvol:
+    driver_opts:
+        type: none
+        device: ${MY_DATA_DIR}/postgres
+        o: bind
+  certs:
+    driver_opts:
+        type: none
+        device: ${MY_DATA_DIR}/certs
+        o: bind
